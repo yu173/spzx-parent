@@ -81,6 +81,7 @@ public class ProductController extends BaseController {
     @Operation(summary = "修改商品")
     @PutMapping
     public AjaxResult edit(@RequestBody Product product) {
+        //从线程上获取登录的名称，拦截器HeaderInterceptor获取请求头，将数据挂载到请求上的。
         product.setUpdateBy(SecurityUtils.getUsername());
         return toAjax(productService.updateProduct(product));
     }
@@ -147,6 +148,8 @@ public class ProductController extends BaseController {
     //----详情 start------------------------------
     @Operation(summary = "获取商品sku信息")
     @InnerAuth
+    //@InnerAuth(isUser = true) //内部权限注解：微服务远程调用必须携带请求头：from-source=inner   AOP切面类验证请求头
+    //如果设置为isUser=true，必须携带user_id和username两个请求头，否则不允许访问
     @GetMapping(value = "/getProductSku/{skuId}")
     public R<ProductSku> getProductSku(@PathVariable("skuId") Long skuId) {
         return R.ok(productService.getProductSku(skuId));
