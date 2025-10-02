@@ -10,7 +10,7 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
  * 购物车模块
  */
 @EnableCustomConfig
-@EnableRyFeignClients
+@EnableRyFeignClients//若依提供的注解
 @SpringBootApplication(exclude = DataSourceAutoConfiguration.class)//取消数据源自动配置
 public class SpzxCartApplication {
     public static void main(String[] args) {

@@ -172,6 +172,21 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         // delete from product where id in (1,2)
         productMapper.deleteBatchIds(Arrays.asList(ids));
 
+        //redisTemplate.opsForValue().setBit(key,productSku.getId(),false);怎么使用循环删除
+        for (Long id : ids) {
+            if (id != null) {  // 修正：只有当id不为null时才处理
+                // 根据商品ID查询其所有的SKU
+                List<ProductSku> productSkuList = productSkuMapper.selectList(
+                        new LambdaQueryWrapper<ProductSku>().eq(ProductSku::getProductId, id)
+                );
+
+                // 将每个SKU在Redis位图中标识为不可用
+                for (ProductSku productSku : productSkuList) {
+                    redisTemplate.opsForValue().setBit("product:sku:data", productSku.getId(), false);
+                }
+            }
+        }
+
         //2.删除ProductSku表数据
         List<ProductSku> productSkuList = productSkuMapper.selectList(new LambdaQueryWrapper<ProductSku>().in(ProductSku::getProductId, Arrays.asList(ids)));
         List<Long> productSkuIdList = productSkuList.stream().map(ProductSku::getId).toList();
@@ -201,14 +216,26 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         productMapper.updateById(product);
     }
 
+    //下架
     @Override
     public void updateStatus(Long id, Integer status) {
         Product product = new Product();
         product.setId(id);
+
+        //根据spu对象id，查询sku集合
+        List<ProductSku> productSkuList = productSkuMapper.selectList(new LambdaQueryWrapper<ProductSku>().eq(ProductSku::getProductId, id));
+        String key = "product:sku:data";
+
         if (status == 1) {
             product.setStatus(1);
+            for (ProductSku productSku : productSkuList) {
+                redisTemplate.opsForValue().setBit(key, productSku.getId(), true);
+            }
         } else {
             product.setStatus(-1);
+            for (ProductSku productSku : productSkuList) {
+                redisTemplate.opsForValue().setBit(key, productSku.getId(), false);
+            }
         }
         productMapper.updateById(product);
     }
