@@ -8,6 +8,8 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 
 /**
  * 购物车模块
+ *
+ * OpenFeign远程调用，丢失请求头。若依提供了com.spzx.common.security.feign.FeignRequestInterceptor拦截器,请求头重新挂载，解决丢失请求头问题。
  */
 @EnableCustomConfig
 @EnableRyFeignClients//若依提供的注解

@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
 
+
+//降级处理类：用OpenFeign组件提供的FallbackFactory工厂类实现的。
+//另外，也可以使用Sentinel实现降级处理、熔断
 @Component
 public class RemoteCartFallbackFactory implements FallbackFactory<RemoteCartService> {
 
