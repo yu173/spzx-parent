@@ -19,11 +19,13 @@ import com.spzx.product.service.IProductService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -231,6 +233,69 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     @Override
     public ProductSku getProductSku(Long skuId) {
+        try {
+            ProductSku productSku = null;
+            String dataKey = "product:sku:" + skuId;
+            //1、先判断缓存有没有
+            if (redisTemplate.hasKey(dataKey)) {//缓存有
+                //2、缓存有从缓存取并返回
+                productSku = (ProductSku) redisTemplate.opsForValue().get(dataKey);
+                System.out.println(Thread.currentThread().getName() + "从缓存中获取 productSku" + productSku);
+                return productSku;
+            } else {//缓存没有
+                //解决缓存击穿问题 - 分布式锁
+                String lockKey = "product:sku:lock:" + skuId;
+                //设置uuid值，防止死锁
+                String lockValue = UUID.randomUUID().toString().replaceAll("-", "");
+                //加上分布式锁并设置过期时间
+                Boolean isLocked = redisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, 1, TimeUnit.MINUTES);//避免死锁
+                //判断锁是否加成功
+                if (isLocked) {
+                    try {
+                        //3、缓存没有从数据库取数据，存放到缓存并返回
+                        productSku = getSkuDataFromDB(skuId);
+                        System.out.println(Thread.currentThread().getName() + "从数据库中获取 productSku" + productSku);
+                        //加上随机时间是为了解决缓存雪崩问题 - 增加随机过期时间：为了不能让它同时过期
+                        //解决缓存穿透：1、查询不到数据，即使是null也存储一份，避免同一个key的值继续穿透到数据库。2、布隆过滤器解决/bitmap
+                        if (productSku == null) {
+                            redisTemplate.opsForValue().set(dataKey, productSku, 10 + new Random().nextInt(10), TimeUnit.MINUTES);
+                        } else {
+                            redisTemplate.opsForValue().set(dataKey, productSku, 60 + new Random().nextInt(10), TimeUnit.MINUTES);
+                        }
+                    } finally {
+                        //避免释放他人的锁 - lua脚本解决
+                        String script = "if redis.call('get',KEYS[1]) == ARGV[1]\n" +
+                                "then \n" +
+                                "\treturn redis.call('del',KEYS[1])\n" +
+                                "else\n" +
+                                "\treturn 0\n" +
+                                "end";
+                        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
+                        redisScript.setScriptText(script);
+                        redisScript.setResultType(Long.class);
+                        //这里如果使用的是StringRedisTemplate，就不用强转了
+                        //Long result = (Long) redisTemplate.execute(redisScript, Arrays.asList(lockKey, lockValue));
+                        redisTemplate.execute(redisScript, Arrays.asList(lockKey, lockValue));
+                    }
+                } else {//加锁没有成功，就要自旋
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    //自旋就是递归调用整个方法本身
+                    System.out.println(Thread.currentThread().getName() + "没抢到锁自旋-------");
+                    return getProductSku(skuId);//睡一觉，自旋一次 - 递归调用
+                }
+            }
+            return productSku;
+        } catch (Exception e) {
+            log.error(e.getMessage());
+            return getSkuDataFromDB(skuId);//兜底的方法，有异常直接查询数据库了。
+        }
+    }
+
+    private ProductSku getSkuDataFromDB(Long skuId) {
         return productSkuMapper.selectById(skuId);
     }
 

@@ -37,6 +37,9 @@ public class ItemServiceImpl implements IItemService {
             throw new ServiceException(productSkuResult.getMsg());
         }
         ProductSku productSku = productSkuResult.getData();
+        if(productSku == null){
+            throw new ServiceException("商品不存在");
+        }
         itemVo.setProductSku(productSku);
 
 
