@@ -7,6 +7,7 @@ import com.spzx.common.core.utils.bean.BeanUtils;
 import com.spzx.product.api.domain.Product;
 import com.spzx.product.api.domain.ProductDetails;
 import com.spzx.product.api.domain.ProductSku;
+import com.spzx.product.api.domain.vo.SkuLockVo;
 import com.spzx.product.api.domain.vo.SkuPrice;
 import com.spzx.product.api.domain.vo.SkuQuery;
 import com.spzx.product.api.domain.vo.SkuStockVo;
@@ -372,22 +373,141 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     // select id,sale_price,market_price from product_sku where id in (1,2,3)
     @Override
     public List<SkuPrice> getSkuPriceList(List<Long> skuIdList) {
-        if (CollectionUtils.isEmpty(skuIdList)) {
-            return new ArrayList<SkuPrice>();
-        }
-        List<ProductSku> skuList = productSkuMapper
-                .selectList(new LambdaQueryWrapper<ProductSku>().in(ProductSku::getId, skuIdList)
-                        .select(ProductSku::getId, ProductSku::getSalePrice, ProductSku::getMarketPrice));
-        if (CollectionUtils.isEmpty(skuList)) {
-            return new ArrayList<SkuPrice>();
-        }
-        return skuList.stream().map((sku) -> {
+        List<ProductSku> productSkuList = productSkuMapper.selectList(new LambdaQueryWrapper<ProductSku>()
+                .in(ProductSku::getId, skuIdList)
+                .select(ProductSku::getId, ProductSku::getSalePrice, ProductSku::getMarketPrice));
+        List<SkuPrice> skuPriceList = productSkuList.stream().map((productSku) -> {
             SkuPrice skuPrice = new SkuPrice();
-            skuPrice.setSkuId(sku.getId());
-            skuPrice.setSalePrice(sku.getSalePrice());
-            skuPrice.setMarketPrice(sku.getMarketPrice());
+            skuPrice.setSkuId(productSku.getId());
+            skuPrice.setSalePrice(productSku.getSalePrice());
+            skuPrice.setMarketPrice(productSku.getMarketPrice());
             return skuPrice;
-        }).toList();
+        }).collect(Collectors.toList());
+        return skuPriceList;
+    }
+
+    /**
+     * 检查与锁定库存
+     *
+     * @param orderNo       订单号
+     * @param skuLockVoList 需要锁定的库存商品信息
+     * @return 是否锁定成功。空串表示成功，非空表示失败。
+     */
+    @Transactional
+    @Override
+    public String checkAndLock(String orderNo, List<SkuLockVo> skuLockVoList) {
+        //1、去重  openfeign远程调用去重，可能重试
+        //通过分布式锁来解决去重
+        String lockKey = "sku:checkAndLock:" + orderNo;
+        String dataKey = "sku:lock:data:" + orderNo;//锁定库存数据的缓存key
+        Boolean isLocked = redisTemplate.opsForValue().setIfAbsent(lockKey, orderNo, 1, TimeUnit.HOURS);
+        if (!isLocked) {
+            if (redisTemplate.hasKey(dataKey)) {
+                return "";//重复请求，不用再执行库存锁定，直接返回成功。
+            } else {
+                return "重复提交";
+            }
+        }
+        //2、检查库存
+        for (SkuLockVo skuLockVo : skuLockVoList) {
+            SkuStock skuStock = skuStockMapper.check(skuLockVo.getSkuId(), skuLockVo.getSkuNum());//查询库存数据，增加数据库行锁  for update
+            if (skuStock == null) {
+                skuLockVo.setIsHaveStock(false);
+            } else {
+                skuLockVo.setIsHaveStock(true);
+            }
+        }
+        if (skuLockVoList.stream().anyMatch((skuLockVo) -> !skuLockVo.getIsHaveStock())) {
+            StringBuilder builder = new StringBuilder();
+            //2.1 只要有一个商品库存不够取消事务回滚，不在进行库存锁定
+            List<SkuLockVo> noHasStockList = skuLockVoList.stream().filter((skuLockVo) -> !skuLockVo.getIsHaveStock()).toList();
+            for (SkuLockVo skuLockVo : noHasStockList) {
+                builder.append("商品【" + skuLockVo.getSkuId() + "】库存不多");
+            }
+            redisTemplate.delete(lockKey);
+            return builder.toString();//非空
+        } else {
+            //2.2 所有商品库存够才会锁库存
+            for (SkuLockVo skuLockVo : skuLockVoList) {
+                int count = skuStockMapper.lock(skuLockVo.getSkuId(), skuLockVo.getSkuNum());
+                if (count == 0) {
+                    redisTemplate.delete(lockKey);
+                    //假设存在锁库存失败的情况，事务回滚
+                    throw new ServiceException("锁库存失败");
+                }
+            }
+        }
+        //3、将锁定库存数据保存到缓存中，用于后期  【解锁库存】  或  【减库存】 使用。
+        redisTemplate.opsForValue().set(dataKey, skuLockVoList);//不需要设置过期时间，什么时候清理缓存：解锁库存或减库存会删除缓存
+        return "";//成功字符串
+    }
+
+    /**
+     * 解锁库存
+     *
+     * @param orderNo
+     */
+    @Transactional
+    @Override
+    public void unlock(String orderNo) {
+        //去重：消息幂等性处理
+        String key = "sku:unlock:" + orderNo;
+        String dataKey = "sku:lock:data:" + orderNo;
+        //业务去重，防止重复消费
+        Boolean isExist = redisTemplate.opsForValue().setIfAbsent(key, orderNo, 1, TimeUnit.HOURS);
+        if(!isExist) return;
+
+        // 获取锁定库存的缓存信息
+        List<SkuLockVo> skuLockVoList = (List<SkuLockVo>)this.redisTemplate.opsForValue().get(dataKey);
+        if (CollectionUtils.isEmpty(skuLockVoList)){
+            return ;//缓存没了  - 有可能已经支付，并减库存了，删除了缓存。
+        }
+
+        // 解锁库存
+        skuLockVoList.forEach(skuLockVo -> {
+            int row = skuStockMapper.unlock(skuLockVo.getSkuId(), skuLockVo.getSkuNum());
+            if(row == 0) {
+                //解除去重
+                this.redisTemplate.delete(key);//删除分布式锁
+                throw new ServiceException("解锁出库失败");//事务回滚
+            }
+        });
+
+        // 解锁库存之后，删除锁定库存的缓存。以防止重复解锁库存
+        this.redisTemplate.delete(dataKey);
+    }
+
+    /**
+     * 扣减库存
+     *
+     * @param orderNo
+     */
+    @Override
+    public void minus(String orderNo) {
+        String key = "sku:minus:" + orderNo;
+        String dataKey = "sku:lock:data:" + orderNo;
+        //业务去重，防止重复消费
+        Boolean isExist = redisTemplate.opsForValue().setIfAbsent(key, orderNo, 1, TimeUnit.HOURS);
+        if(!isExist) return;
+
+        // 获取锁定库存的缓存信息
+        List<SkuLockVo> skuLockVoList = (List<SkuLockVo>)this.redisTemplate.opsForValue().get(dataKey);
+        if (CollectionUtils.isEmpty(skuLockVoList)){
+            return ;//有可能解锁完库存，清理掉缓存。  也有可能1小时后分布式失效后，又过来重复消息。
+        }
+
+        // 减库存
+        skuLockVoList.forEach(skuLockVo -> {
+            int row = skuStockMapper.minus(skuLockVo.getSkuId(), skuLockVo.getSkuNum());
+            if(row == 0) {
+                //解除去重
+                this.redisTemplate.delete(key);
+                throw new ServiceException("减出库失败");
+            }
+        });
+
+        // 解锁库存之后，删除锁定库存的缓存。以防止重复解锁库存
+        this.redisTemplate.delete(dataKey);
     }
 
 }

@@ -22,7 +22,7 @@ public class CartInfo extends BaseEntity {
    private BigDecimal cartPrice;
 
    @Schema(description = "实时价格")
-   private BigDecimal skuPrice;  
+   private BigDecimal skuPrice;//数据库最新价格
 
    @Schema(description = "数量")
    private Integer skuNum;

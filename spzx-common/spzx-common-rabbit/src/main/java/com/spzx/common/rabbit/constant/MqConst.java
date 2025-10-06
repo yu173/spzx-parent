@@ -39,7 +39,7 @@ public class MqConst {
     public static final String EXCHANGE_CANCEL_ORDER = "spzx.cancel.order";
     public static final String ROUTING_CANCEL_ORDER = "spzx.cancel.order";
     public static final String QUEUE_CANCEL_ORDER = "spzx.cancel.order";
-    //public static final Integer CANCEL_ORDER_DELAY_TIME = 15 * 60;
+    //public static final Integer CANCEL_ORDER_DELAY_TIME = 15 * 60;//等待支付的时间
     public static final Integer CANCEL_ORDER_DELAY_TIME = 1 * 60; //TODO 临时
 
 

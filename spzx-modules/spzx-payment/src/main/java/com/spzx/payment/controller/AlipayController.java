@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import java.util.Map;
 
 @Slf4j
-@Controller
+@Controller//同步请求用@Controller  异步请求用@RestController
 @RequestMapping("/alipay")
 public class AlipayController extends BaseController {
 
@@ -31,4 +31,14 @@ public class AlipayController extends BaseController {
     @Autowired
     private IPaymentInfoService paymentInfoService;
 
+
+    @Operation(summary = "支付宝下单")
+    @RequiresLogin
+    @RequestMapping("submitAlipay/{orderNo}")
+    @ResponseBody
+    public AjaxResult submitAlipay(@PathVariable(value = "orderNo") String orderNo) {
+        //h5表单：用于打开手机支付宝，弹出支付密码框。
+        String form = alipayService.submitAlipay(orderNo);
+        return success(form);
+    }
 }

@@ -9,4 +9,5 @@ import com.spzx.payment.domain.PaymentInfo;
 public interface IPaymentInfoService extends IService<PaymentInfo> {
 
 
+    PaymentInfo savePaymentInfo(String orderNo);
 }

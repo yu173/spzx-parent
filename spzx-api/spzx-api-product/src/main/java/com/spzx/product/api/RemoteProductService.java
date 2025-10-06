@@ -12,6 +12,7 @@ import com.spzx.product.api.domain.vo.SkuPrice;
 import com.spzx.product.api.domain.vo.SkuQuery;
 import com.spzx.product.api.domain.vo.SkuStockVo;
 import com.spzx.product.api.factory.RemoteProductFallbackFactory;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.cloud.openfeign.SpringQueryMap;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,10 @@ import java.util.Map;
 @FeignClient(contextId = "remoteProductService",
         value = ServiceNameConstants.PRODUCT_SERVICE,
         fallbackFactory = RemoteProductFallbackFactory.class)
+/**
+ * 面试问题：你们的项目中OpenFeign远程调用是怎么实现降级处理的？
+ * 答：我们的项目是使用OpenFeign组件中的FallbackFactory来实现的。还可以使用sentinel框架中一种方法去实现。
+ */
 public interface RemoteProductService {
 
     @GetMapping("/product/getTopSale")
@@ -68,6 +73,17 @@ public interface RemoteProductService {
      * @return
      */
     @PostMapping(value = "/product/getSkuPriceList")
-    public R<List<SkuPrice>> getSkuPriceList(@RequestBody List<Long> skuIdList, @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
+    public R<List<SkuPrice>> getSkuPriceList(@RequestBody List<Long> skuIdList,@RequestHeader(SecurityConstants.FROM_SOURCE) String source);
 
+
+    /**
+     * 检查与锁定库存
+     * @param orderNo 订单编号
+     * @param skuLockVoList 锁定库存的商品
+     * @return 空值表示锁定成功：非空表示锁定失败
+     */
+    @PostMapping("/product/checkAndLock/{orderNo}")
+    public R<String> checkAndLock(@PathVariable("orderNo") String orderNo,
+                                  @RequestBody List<SkuLockVo> skuLockVoList,
+                                  @RequestHeader(SecurityConstants.FROM_SOURCE) String source);
 }

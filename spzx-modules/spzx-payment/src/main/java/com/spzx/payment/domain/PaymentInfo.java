@@ -43,7 +43,7 @@ public class PaymentInfo extends BaseEntity {
      */
     @Excel(name = "交易编号", readConverterExp = "微=信或支付")
     @Schema(description = "交易编号")
-    private String tradeNo;
+    private String tradeNo;//支付宝和用户之间扣款后产生的交易流水号。
 
     /**
      * 支付金额
@@ -57,7 +57,7 @@ public class PaymentInfo extends BaseEntity {
      */
     @Excel(name = "交易内容")
     @Schema(description = "交易内容")
-    private String content;
+    private String content;//商品名称
 
     /**
      * 支付状态：0-未支付 1-已支付 -1-关闭
@@ -79,6 +79,6 @@ public class PaymentInfo extends BaseEntity {
      */
     @Excel(name = "回调信息")
     @Schema(description = "回调信息")
-    private String callbackContent;
+    private String callbackContent;//支付宝扣款后异步通知返回给商品甄选的数据
 
 }

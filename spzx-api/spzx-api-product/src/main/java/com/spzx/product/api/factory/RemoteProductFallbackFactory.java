@@ -79,6 +79,19 @@ public class RemoteProductFallbackFactory implements FallbackFactory<RemoteProdu
                 return R.fail("批量获取商品sku最新价格信:" + throwable.getMessage());
             }
 
+            /**
+             * 检查与锁定库存
+             *
+             * @param orderNo       订单编号
+             * @param skuLockVoList 锁定库存的商品
+             * @param source
+             * @return 空值表示锁定成功：非空表示锁定失败
+             */
+            @Override
+            public R<String> checkAndLock(String orderNo, List<SkuLockVo> skuLockVoList, String source) {
+                return R.fail("检查与锁定库存失败:" + throwable.getMessage());
+            }
+
         };
     }
 }

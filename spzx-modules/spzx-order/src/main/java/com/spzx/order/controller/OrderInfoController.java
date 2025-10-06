@@ -12,6 +12,7 @@ import com.spzx.common.security.annotation.InnerAuth;
 import com.spzx.common.security.annotation.RequiresLogin;
 import com.spzx.common.security.annotation.RequiresPermissions;
 import com.spzx.order.api.domain.OrderInfo;
+import com.spzx.order.api.domain.OrderItem;
 import com.spzx.order.domain.vo.OrderForm;
 import com.spzx.order.domain.vo.TradeVo;
 import com.spzx.order.service.IOrderInfoService;
@@ -29,7 +30,7 @@ import java.util.List;
 @RequestMapping("/orderInfo")
 public class OrderInfoController extends BaseController {
     @Autowired
-    private IOrderInfoService orderInfoService;
+    private IOrderInfoService orderInfoService;//代理对象
 
     /**
      * 查询订单列表
@@ -67,5 +68,36 @@ public class OrderInfoController extends BaseController {
     }
 
 
+    //=============================================================
+    @Operation(summary = "去结算")
+    @RequiresLogin//前台系统用户登录才能访问
+    @GetMapping(value = "/trade")
+    public AjaxResult trade() {
+        return success(orderInfoService.trade());
+    }
+
+    @Operation(summary = "下单")
+    @RequiresLogin//前台系统用户登录才能访问
+    @PostMapping(value = "/submitOrder")
+    public AjaxResult submitOrder(@RequestBody OrderForm orderForm) {
+       Long orderId= orderInfoService.submitOrder(orderForm);
+        return success(orderId);
+    }
+    @Operation(summary = "获取订单信息")
+    @RequiresLogin
+    @GetMapping("getOrderInfo/{orderId}")
+    public AjaxResult getOrderInfo(@PathVariable Long orderId) {
+        OrderInfo orderInfo = orderInfoService.getById(orderId);
+        return success(orderInfo);
+    }
+
+    @Operation(summary = "根据订单号获取订单信息")
+    @InnerAuth
+    @GetMapping("getByOrderNo/{orderNo}")
+    public R<OrderInfo> getByOrderNo(@PathVariable String orderNo) {
+        //返回订单及订单项信息
+        OrderInfo orderInfo = orderInfoService.getByOrderNo(orderNo);
+        return R.ok(orderInfo);
+    }
 
 }

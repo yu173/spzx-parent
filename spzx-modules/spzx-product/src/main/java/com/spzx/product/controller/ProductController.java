@@ -8,18 +8,19 @@ import com.spzx.common.core.web.domain.AjaxResult;
 import com.spzx.common.core.web.page.TableDataInfo;
 import com.spzx.common.security.annotation.InnerAuth;
 import com.spzx.common.security.utils.SecurityUtils;
+import com.spzx.product.api.domain.Product;
+import com.spzx.product.api.domain.ProductDetails;
 import com.spzx.product.api.domain.ProductSku;
 import com.spzx.product.api.domain.vo.SkuLockVo;
 import com.spzx.product.api.domain.vo.SkuPrice;
 import com.spzx.product.api.domain.vo.SkuQuery;
 import com.spzx.product.api.domain.vo.SkuStockVo;
-import com.spzx.product.api.domain.Product;
-import com.spzx.product.api.domain.ProductDetails;
 import com.spzx.product.service.IProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -191,4 +192,33 @@ public class ProductController extends BaseController {
     }
     //----详情 end------------------------------
 
+    //=============================================================
+    @Operation(summary = "批量获取商品sku最新价格信息")
+    @InnerAuth
+    @PostMapping(value = "/getSkuPriceList")
+    public R<List<SkuPrice>> getSkuPriceList(@RequestBody List<Long> skuIdList) {//skuIdList=[1,2,3]
+        List<SkuPrice> skuPriceList = productService.getSkuPriceList(skuIdList);
+        return R.ok(skuPriceList);
+    }
+    //=============================================================
+    //下单时来调用这个接口
+    //注意：发送post请求过来，下单的数据将List<OrderItem>转换为List<SkuLockVo>传递过来
+    //业务层返回result：空串表示成功，非空表示失败（xxx库存不足锁定库存失败）。
+    @InnerAuth
+    @Operation(summary = "检查与锁定库存")
+    @PostMapping("checkAndLock/{orderNo}")
+    public R<String> checkAndLock(@PathVariable("orderNo") String orderNo, @RequestBody List<SkuLockVo> skuLockVoList) {
+        try {
+            String result = productService.checkAndLock(orderNo,skuLockVoList);
+            /*if(StringUtils.hasText( result)){//锁定库存失败
+                return R.ok(result);//失败原因  调用者端判断状态是否为800，抛异常
+            }else{
+                return R.ok();//正常调用
+            }*/
+            return R.ok(result);
+        } catch (Exception e) {
+            return R.fail(e.getMessage());
+            //throw new ServiceException(e.getMessage());//调用者端openfeign降级处理
+        }
+    }
 }

@@ -98,4 +98,24 @@ public interface IProductService extends IService<Product> {
     //----详情 end------------------------------
 
     public List<SkuPrice> getSkuPriceList(List<Long> skuIdList);
+
+    /**
+     * 检查与锁定库存
+     * @param orderNo 订单号
+     * @param skuLockVoList 需要锁定的库存商品信息
+     * @return  是否锁定成功。空串表示成功，非空表示失败。
+     */
+    String checkAndLock(String orderNo, List<SkuLockVo> skuLockVoList);
+
+    /**
+     * 解锁库存
+     * @param orderNo
+     */
+    void unlock(String orderNo);
+
+    /**
+     * 扣减库存
+     * @param orderNo
+     */
+    void minus(String orderNo);
 }

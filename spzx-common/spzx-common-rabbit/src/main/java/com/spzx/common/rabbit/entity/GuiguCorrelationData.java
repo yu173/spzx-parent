@@ -20,5 +20,5 @@ public class GuiguCorrelationData extends CorrelationData {
     //是否延迟消息
     private boolean isDelay = false;
     //延迟时长
-    private int delayTime = 10;
+    private int delayTime = 10;//延迟交换机延长多长时间会将消息转发给队列
 }
