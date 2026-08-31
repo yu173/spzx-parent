@@ -18,7 +18,7 @@ const service = axios.create({
   //VITE_APP_BASE_API = '/dev-api'
   baseURL: import.meta.env.VITE_APP_BASE_API,
   // 超时
-  timeout: 10000
+  timeout: 30000
 })
 
 // request拦截器
